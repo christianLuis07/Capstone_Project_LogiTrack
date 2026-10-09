@@ -1,15 +1,65 @@
+using System.Text;
 using System.Text.Json.Serialization;
 using LogiTrack;
 using LogiTrack.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Register EF Core DbContext with SQLite
+// 1. Register EF Core DbContext with SQLite
 builder.Services.AddDbContext<LogiTrackContext>(options =>
     options.UseSqlite("Data Source=logitrack.db"));
 
-// Register Controllers and handle cyclic references
+// 2. Configure ASP.NET Core Identity
+builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+{
+    options.Password.RequireDigit = false;
+    options.Password.RequireLowercase = false;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequiredLength = 6;
+})
+.AddEntityFrameworkStores<LogiTrackContext>()
+.AddDefaultTokenProviders();
+
+// 3. Configure JWT Authentication
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "LogiTrackSuperSecretSecurityKey2026!MustBeAtLeast32BytesLong!";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "LogiTrackAPI";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "LogiTrackClient";
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+        ClockSkew = TimeSpan.Zero
+    };
+});
+
+builder.Services.AddAuthorization();
+
+// 4. Enable In-Memory Caching (Part 4 Performance Optimization)
+builder.Services.AddMemoryCache();
+
+// 5. Register Controllers & JSON options
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -17,15 +67,35 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     });
 
-// Configure Swagger / OpenAPI
+// 5. Configure Swagger / OpenAPI with JWT Bearer Support
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
+    c.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "LogiTrack Order Management API",
         Version = "v1",
-        Description = "LogiTrack Order and Inventory Management Web API (Capstone Part 2)"
+        Description = "LogiTrack Order & Inventory Management Secured API with JWT & Roles (Part 3)"
+    });
+
+    var securityScheme = new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter JWT Bearer token"
+    };
+
+    c.AddSecurityDefinition("Bearer", securityScheme);
+
+    c.AddSecurityRequirement(doc => new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecuritySchemeReference("Bearer"),
+            new List<string>()
+        }
     });
 });
 
@@ -43,75 +113,90 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Authentication MUST be before Authorization
+app.UseAuthentication();
 app.UseAuthorization();
 
 // Map controller routes
 app.MapControllers();
 
-// Health check and route discovery landing endpoint
+// Health check and root route
 app.MapGet("/", () => Results.Ok(new
 {
     Application = "LogiTrack Order Management System",
     Status = "Healthy",
-    Version = "Part 2 Active",
+    Version = "Part 3 Active (Secured with ASP.NET Identity & JWT)",
     SwaggerUI = "/swagger",
-    Endpoints = new[]
+    AuthEndpoints = new[]
     {
-        "GET /api/inventory",
-        "GET /api/inventory/{id}",
-        "POST /api/inventory",
-        "DELETE /api/inventory/{id}",
-        "GET /api/orders",
-        "GET /api/orders/{id}",
-        "POST /api/orders",
-        "DELETE /api/orders/{id}"
+        "POST /api/auth/register",
+        "POST /api/auth/login"
+    },
+    ProtectedEndpoints = new[]
+    {
+        "GET /api/inventory [Authorize]",
+        "POST /api/inventory [Authorize(Roles = 'Manager')]",
+        "DELETE /api/inventory/{id} [Authorize(Roles = 'Manager')]",
+        "GET /api/orders [Authorize]",
+        "POST /api/orders [Authorize]",
+        "DELETE /api/orders/{id} [Authorize(Roles = 'Manager')]"
     }
 }));
 
 // ==========================================
-// CAPSTONE ACTIVITY STARTUP TESTS & SEEDING
+// SEEDING AND VERIFICATION TESTS
 // ==========================================
 using (var scope = app.Services.CreateScope())
 {
-    var context = scope.ServiceProvider.GetRequiredService<LogiTrackContext>();
+    var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<LogiTrackContext>();
+    var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+    var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
 
-    Console.WriteLine("==================================================");
-    Console.WriteLine("Step 2 Test: InventoryItem DisplayInfo()");
-    Console.WriteLine("==================================================");
-    var testItem = new InventoryItem
+    // 1. Seed Roles
+    string[] roleNames = { "Manager", "User" };
+    foreach (var roleName in roleNames)
     {
-        ItemId = 1,
-        Name = "Pallet Jack",
-        Quantity = 12,
-        Location = "Warehouse A"
-    };
-    testItem.DisplayInfo();
+        if (!await roleManager.RoleExistsAsync(roleName))
+        {
+            await roleManager.CreateAsync(new IdentityRole(roleName));
+        }
+    }
 
-    Console.WriteLine();
-    Console.WriteLine("==================================================");
-    Console.WriteLine("Step 3 Test: Order Add/Remove & Summary");
-    Console.WriteLine("==================================================");
-    var testOrder = new Order
+    // 2. Seed Default Manager User
+    if (await userManager.FindByNameAsync("manager") == null)
     {
-        OrderId = 1001,
-        CustomerName = "Samir",
-        DatePlaced = new DateTime(2025, 4, 5)
-    };
-    var item1 = new InventoryItem { ItemId = 101, Name = "Pallet Jack", Quantity = 2, Location = "Warehouse A" };
-    var item2 = new InventoryItem { ItemId = 102, Name = "Forklift", Quantity = 1, Location = "Warehouse B" };
-    var item3 = new InventoryItem { ItemId = 103, Name = "Hand Truck", Quantity = 4, Location = "Warehouse C" };
+        var managerUser = new ApplicationUser
+        {
+            UserName = "manager",
+            Email = "manager@logitrack.com",
+            FullName = "Warehouse Manager"
+        };
+        var createResult = await userManager.CreateAsync(managerUser, "Manager123!");
+        if (createResult.Succeeded)
+        {
+            await userManager.AddToRoleAsync(managerUser, "Manager");
+        }
+    }
 
-    testOrder.AddItem(item1);
-    testOrder.AddItem(item2);
-    testOrder.AddItem(item3);
-    testOrder.RemoveItem(103);
+    // 3. Seed Default Regular User
+    if (await userManager.FindByNameAsync("user") == null)
+    {
+        var regularUser = new ApplicationUser
+        {
+            UserName = "user",
+            Email = "user@logitrack.com",
+            FullName = "Logistics Staff"
+        };
+        var createResult = await userManager.CreateAsync(regularUser, "User123!");
+        if (createResult.Succeeded)
+        {
+            await userManager.AddToRoleAsync(regularUser, "User");
+        }
+    }
 
-    Console.WriteLine(testOrder.GetOrderSummary());
-
-    Console.WriteLine();
-    Console.WriteLine("==================================================");
-    Console.WriteLine("Step 5 Test: Seed and Verify Database");
-    Console.WriteLine("==================================================");
+    // 4. Initial Inventory Seeding & Tests
     if (!context.InventoryItems.Any())
     {
         context.InventoryItems.Add(new InventoryItem
@@ -120,17 +205,13 @@ using (var scope = app.Services.CreateScope())
             Quantity = 12,
             Location = "Warehouse A"
         });
-
-        context.SaveChanges();
+        await context.SaveChangesAsync();
     }
 
-    var items = context.InventoryItems.ToList();
-    foreach (var item in items)
-    {
-        item.DisplayInfo();
-    }
     Console.WriteLine("==================================================");
-    Console.WriteLine();
+    Console.WriteLine("LogiTrack System Ready - Part 3 Security Configured");
+    Console.WriteLine("Seed users: manager (Role: Manager) | user (Role: User)");
+    Console.WriteLine("==================================================");
 }
 
 app.Run();

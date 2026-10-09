@@ -1,37 +1,91 @@
 @LogiTrack_HostAddress = http://localhost:5160
 
-### 1. Get all inventory items
-GET {{LogiTrack_HostAddress}}/api/inventory
-Accept: application/json
+### ==============================================
+### AUTHENTICATION ENDPOINTS (Part 3)
+### ==============================================
 
-### 2. Get inventory item by ID
-GET {{LogiTrack_HostAddress}}/api/inventory/1
-Accept: application/json
-
-### 3. Add a new inventory item
-POST {{LogiTrack_HostAddress}}/api/inventory
+### 1. Register a new Manager
+POST {{LogiTrack_HostAddress}}/api/auth/register
 Content-Type: application/json
 
 {
-  "name": "Industrial Forklift",
-  "quantity": 5,
-  "location": "Warehouse B"
+  "username": "warehouse_manager",
+  "email": "manager2@logitrack.com",
+  "password": "ManagerPassword123!",
+  "role": "Manager"
 }
 
-### 4. Delete inventory item by ID
-DELETE {{LogiTrack_HostAddress}}/api/inventory/2
+### 2. Login as Manager to get JWT Token
+# @name loginManager
+POST {{LogiTrack_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "manager",
+  "password": "Manager123!"
+}
+
+### 3. Login as Regular Staff (User)
+# @name loginUser
+POST {{LogiTrack_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "user",
+  "password": "User123!"
+}
+
+### Save Token from Login Response
+@managerToken = {{loginManager.response.body.token}}
+@userToken = {{loginUser.response.body.token}}
+
+### ==============================================
+### INVENTORY ENDPOINTS [PROTECTED]
+### ==============================================
+
+### 4. Get all inventory items (Requires Authentication)
+GET {{LogiTrack_HostAddress}}/api/inventory
+Authorization: Bearer {{userToken}}
 Accept: application/json
 
-### 5. Get all orders
+### 5. Get inventory item by ID (Requires Authentication)
+GET {{LogiTrack_HostAddress}}/api/inventory/1
+Authorization: Bearer {{userToken}}
+Accept: application/json
+
+### 6. Add a new inventory item (Requires Role: Manager)
+POST {{LogiTrack_HostAddress}}/api/inventory
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "name": "Industrial Pallet Jack",
+  "quantity": 8,
+  "location": "Warehouse C"
+}
+
+### 7. Delete inventory item by ID (Requires Role: Manager)
+DELETE {{LogiTrack_HostAddress}}/api/inventory/1
+Authorization: Bearer {{managerToken}}
+Accept: application/json
+
+### ==============================================
+### ORDER ENDPOINTS [PROTECTED]
+### ==============================================
+
+### 8. Get all orders (Requires Authentication)
 GET {{LogiTrack_HostAddress}}/api/orders
+Authorization: Bearer {{userToken}}
 Accept: application/json
 
-### 6. Get order by ID (with items)
+### 9. Get order by ID with items (Requires Authentication)
 GET {{LogiTrack_HostAddress}}/api/orders/1
+Authorization: Bearer {{userToken}}
 Accept: application/json
 
-### 7. Create a new order with multiple items
+### 10. Create a new order with items (Requires Authentication)
 POST {{LogiTrack_HostAddress}}/api/orders
+Authorization: Bearer {{userToken}}
 Content-Type: application/json
 
 {
@@ -51,6 +105,7 @@ Content-Type: application/json
   ]
 }
 
-### 8. Delete order by ID
+### 11. Delete order by ID (Requires Role: Manager)
 DELETE {{LogiTrack_HostAddress}}/api/orders/1
+Authorization: Bearer {{managerToken}}
 Accept: application/json
