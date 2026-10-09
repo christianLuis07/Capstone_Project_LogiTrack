@@ -1,0 +1,52 @@
+name: LogiTrack CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    name: Build, Verify and Package
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Cache NuGet Packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Restore Dependencies
+      run: dotnet restore LogiTrack.slnx
+
+    - name: Build Solution (Release)
+      run: dotnet build LogiTrack.slnx --configuration Release --no-restore
+
+    - name: Install EF Core CLI Tool
+      run: dotnet tool install --global dotnet-ef
+
+    - name: Verify EF Core Migrations
+      run: |
+        cd LogiTrack
+        dotnet ef migrations list
+
+    - name: Publish Web API Package
+      run: dotnet publish LogiTrack/LogiTrack.csproj --configuration Release --no-build --output ./publish
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: logitrack-api-artifact
+        path: ./publish

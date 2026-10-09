@@ -12,6 +12,21 @@ public class Order
 
     public DateTime DatePlaced { get; set; }
 
+    /// <summary>
+    /// Tracks session ID for cart-like temporary or multi-session state persistence.
+    /// </summary>
+    public string? SessionId { get; set; }
+
+    /// <summary>
+    /// Username or User ID of the creator.
+    /// </summary>
+    public string? CreatedBy { get; set; }
+
+    /// <summary>
+    /// Order status: Pending, Processing, Completed, Cancelled.
+    /// </summary>
+    public string Status { get; set; } = "Pending";
+
     // List of items in the order
     public List<InventoryItem> Items { get; set; } = new();
 

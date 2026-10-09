@@ -28,14 +28,15 @@ public class OrderController : ControllerBase
     /// <summary>
     /// GET: /api/orders
     /// Returns a list of all orders including their associated items.
-    /// Optimized with in-memory caching and EF Core .AsNoTracking() to eliminate entity tracking overhead.
+    /// Supports optional sessionId query parameter for cart and session rehydration.
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Order>>> GetAllOrders()
+    public async Task<ActionResult<IEnumerable<Order>>> GetAllOrders([FromQuery] string? sessionId = null)
     {
         var stopwatch = Stopwatch.StartNew();
+        var cacheKey = string.IsNullOrEmpty(sessionId) ? OrdersCacheKey : $"{OrdersCacheKey}_{sessionId}";
 
-        if (_cache.TryGetValue(OrdersCacheKey, out List<Order>? cachedOrders) && cachedOrders != null)
+        if (_cache.TryGetValue(cacheKey, out List<Order>? cachedOrders) && cachedOrders != null)
         {
             stopwatch.Stop();
             Response.Headers.Append("X-Cache", "HIT");
@@ -43,17 +44,24 @@ public class OrderController : ControllerBase
             return Ok(cachedOrders);
         }
 
-        // Cache miss: Execute optimized eager-loading query with AsNoTracking()
-        var orders = await _context.Orders
+        // Cache miss: Execute optimized query with AsNoTracking()
+        var query = _context.Orders
             .AsNoTracking()
             .Include(o => o.Items)
-            .ToListAsync();
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(sessionId))
+        {
+            query = query.Where(o => o.SessionId == sessionId);
+        }
+
+        var orders = await query.ToListAsync();
 
         var cacheEntryOptions = new MemoryCacheEntryOptions()
             .SetAbsoluteExpiration(CacheDuration)
             .SetPriority(CacheItemPriority.Normal);
 
-        _cache.Set(OrdersCacheKey, orders, cacheEntryOptions);
+        _cache.Set(cacheKey, orders, cacheEntryOptions);
 
         stopwatch.Stop();
         Response.Headers.Append("X-Cache", "MISS");
@@ -103,6 +111,13 @@ public class OrderController : ControllerBase
         if (order.DatePlaced == default)
         {
             order.DatePlaced = DateTime.UtcNow;
+        }
+
+        order.CreatedBy ??= User.Identity?.Name ?? order.CustomerName;
+        order.SessionId ??= Guid.NewGuid().ToString("N");
+        if (string.IsNullOrEmpty(order.Status))
+        {
+            order.Status = "Pending";
         }
 
         // Query Optimization: Batch-fetch existing item IDs to eliminate N+1 queries
@@ -182,5 +197,31 @@ public class OrderController : ControllerBase
         _cache.Remove(InventoryCacheKey);
 
         return Ok(new { message = $"Order with ID {id} successfully deleted." });
+    }
+
+    /// <summary>
+    /// PATCH: /api/orders/{id}/status
+    /// Updates order lifecycle status (e.g. Processing, Completed, Cancelled).
+    /// </summary>
+    [HttpPatch("{id}/status")]
+    public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] string status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return BadRequest(new { message = "Status cannot be empty." });
+        }
+
+        var order = await _context.Orders.FindAsync(id);
+        if (order == null)
+        {
+            return NotFound(new { message = $"Order with ID {id} was not found." });
+        }
+
+        order.Status = status;
+        await _context.SaveChangesAsync();
+
+        _cache.Remove(OrdersCacheKey);
+
+        return Ok(new { message = $"Order #{id} status updated to '{status}'.", orderId = id, status = order.Status });
     }
 }

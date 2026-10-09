@@ -59,7 +59,22 @@ builder.Services.AddAuthorization();
 // 4. Enable In-Memory Caching (Part 4 Performance Optimization)
 builder.Services.AddMemoryCache();
 
-// 5. Register Controllers & JSON options
+// 5. Register ProblemDetails and Health Checks
+builder.Services.AddProblemDetails();
+builder.Services.AddHealthChecks();
+
+// 6. Configure CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
+
+// 7. Register Controllers & JSON options
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -67,7 +82,7 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     });
 
-// 5. Configure Swagger / OpenAPI with JWT Bearer Support
+// 8. Configure Swagger / OpenAPI with JWT Bearer Support
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -75,7 +90,7 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "LogiTrack Order Management API",
         Version = "v1",
-        Description = "LogiTrack Order & Inventory Management Secured API with JWT & Roles (Part 3)"
+        Description = "LogiTrack Production-Ready Secured Logistics API (Capstone Final - Part 5)"
     });
 
     var securityScheme = new OpenApiSecurityScheme
@@ -112,13 +127,17 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.UseExceptionHandler();
+app.UseStatusCodePages();
 app.UseHttpsRedirection();
+app.UseCors("AllowAll");
 
 // Authentication MUST be before Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Map controller routes
+// Map Health Checks & Controller routes
+app.MapHealthChecks("/health");
 app.MapControllers();
 
 // Health check and root route
@@ -126,21 +145,18 @@ app.MapGet("/", () => Results.Ok(new
 {
     Application = "LogiTrack Order Management System",
     Status = "Healthy",
-    Version = "Part 3 Active (Secured with ASP.NET Identity & JWT)",
+    Version = "Capstone Project Complete (Parts 1-5)",
+    Environment = app.Environment.EnvironmentName,
     SwaggerUI = "/swagger",
-    AuthEndpoints = new[]
+    HealthCheck = "/health",
+    Features = new[]
     {
-        "POST /api/auth/register",
-        "POST /api/auth/login"
-    },
-    ProtectedEndpoints = new[]
-    {
-        "GET /api/inventory [Authorize]",
-        "POST /api/inventory [Authorize(Roles = 'Manager')]",
-        "DELETE /api/inventory/{id} [Authorize(Roles = 'Manager')]",
-        "GET /api/orders [Authorize]",
-        "POST /api/orders [Authorize]",
-        "DELETE /api/orders/{id} [Authorize(Roles = 'Manager')]"
+        "ASP.NET Core Identity & JWT Authentication",
+        "Role-Based Access Control (Manager vs User)",
+        "In-Memory Caching (30s TTL + Auto-Eviction on mutation)",
+        "Optimized EF Core queries (.AsNoTracking + eager loading)",
+        "State Persistence & Order Lifecycle Management",
+        "CI/CD with GitHub Actions"
     }
 }));
 

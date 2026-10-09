@@ -1,21 +1,33 @@
 @LogiTrack_HostAddress = http://localhost:5160
 
 ### ==============================================
+### SYSTEM HEALTH & DISCOVERY
+### ==============================================
+
+### 1. Health Check
+GET {{LogiTrack_HostAddress}}/health
+Accept: application/json
+
+### 2. API Discovery & Landing
+GET {{LogiTrack_HostAddress}}/
+Accept: application/json
+
+### ==============================================
 ### AUTHENTICATION ENDPOINTS (Part 3)
 ### ==============================================
 
-### 1. Register a new Manager
+### 3. Register a new User
 POST {{LogiTrack_HostAddress}}/api/auth/register
 Content-Type: application/json
 
 {
-  "username": "warehouse_manager",
-  "email": "manager2@logitrack.com",
-  "password": "ManagerPassword123!",
-  "role": "Manager"
+  "username": "warehouse_staff",
+  "email": "staff@logitrack.com",
+  "password": "StaffPassword123!",
+  "role": "User"
 }
 
-### 2. Login as Manager to get JWT Token
+### 4. Login as Manager to get JWT Token
 # @name loginManager
 POST {{LogiTrack_HostAddress}}/api/auth/login
 Content-Type: application/json
@@ -25,7 +37,7 @@ Content-Type: application/json
   "password": "Manager123!"
 }
 
-### 3. Login as Regular Staff (User)
+### 5. Login as Regular Staff (User)
 # @name loginUser
 POST {{LogiTrack_HostAddress}}/api/auth/login
 Content-Type: application/json
@@ -40,50 +52,55 @@ Content-Type: application/json
 @userToken = {{loginUser.response.body.token}}
 
 ### ==============================================
-### INVENTORY ENDPOINTS [PROTECTED]
+### INVENTORY ENDPOINTS [CACHED & PROTECTED]
 ### ==============================================
 
-### 4. Get all inventory items (Requires Authentication)
+### 6. Get all inventory items (Cached 30s)
 GET {{LogiTrack_HostAddress}}/api/inventory
 Authorization: Bearer {{userToken}}
 Accept: application/json
 
-### 5. Get inventory item by ID (Requires Authentication)
+### 7. Get inventory item by ID
 GET {{LogiTrack_HostAddress}}/api/inventory/1
 Authorization: Bearer {{userToken}}
 Accept: application/json
 
-### 6. Add a new inventory item (Requires Role: Manager)
+### 8. Add a new inventory item (Requires Role: Manager - Invalidates Cache)
 POST {{LogiTrack_HostAddress}}/api/inventory
 Authorization: Bearer {{managerToken}}
 Content-Type: application/json
 
 {
-  "name": "Industrial Pallet Jack",
-  "quantity": 8,
+  "name": "Heavy Duty Pallet Stacker",
+  "quantity": 10,
   "location": "Warehouse C"
 }
 
-### 7. Delete inventory item by ID (Requires Role: Manager)
+### 9. Delete inventory item by ID (Requires Role: Manager - Invalidates Cache)
 DELETE {{LogiTrack_HostAddress}}/api/inventory/1
 Authorization: Bearer {{managerToken}}
 Accept: application/json
 
 ### ==============================================
-### ORDER ENDPOINTS [PROTECTED]
+### ORDER ENDPOINTS [STATE PERSISTENCE & CACHED]
 ### ==============================================
 
-### 8. Get all orders (Requires Authentication)
+### 10. Get all orders (Cached 30s)
 GET {{LogiTrack_HostAddress}}/api/orders
 Authorization: Bearer {{userToken}}
 Accept: application/json
 
-### 9. Get order by ID with items (Requires Authentication)
+### 11. Get orders by SessionId (Session State Rehydration)
+GET {{LogiTrack_HostAddress}}/api/orders?sessionId=session_cart_101
+Authorization: Bearer {{userToken}}
+Accept: application/json
+
+### 12. Get order by ID with items
 GET {{LogiTrack_HostAddress}}/api/orders/1
 Authorization: Bearer {{userToken}}
 Accept: application/json
 
-### 10. Create a new order with items (Requires Authentication)
+### 13. Create a new persistent order with multiple items and SessionId
 POST {{LogiTrack_HostAddress}}/api/orders
 Authorization: Bearer {{userToken}}
 Content-Type: application/json
@@ -91,21 +108,30 @@ Content-Type: application/json
 {
   "customerName": "Elena Rostova",
   "datePlaced": "2026-10-10T08:30:00Z",
+  "sessionId": "session_cart_101",
+  "status": "Pending",
   "items": [
     {
-      "name": "Barcode Scanner",
+      "name": "Barcode Scanner Pro",
       "quantity": 3,
       "location": "Warehouse A"
     },
     {
-      "name": "Heavy Duty Hand Truck",
+      "name": "Industrial Hand Truck",
       "quantity": 2,
       "location": "Warehouse C"
     }
   ]
 }
 
-### 11. Delete order by ID (Requires Role: Manager)
+### 14. Update order status (Lifecycle management)
+PATCH {{LogiTrack_HostAddress}}/api/orders/1/status
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+"Processing"
+
+### 15. Delete order by ID (Requires Role: Manager)
 DELETE {{LogiTrack_HostAddress}}/api/orders/1
 Authorization: Bearer {{managerToken}}
 Accept: application/json
