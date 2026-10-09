@@ -1,7 +1,7 @@
+global using LogiTrack.Models;
 using System.Text;
 using System.Text.Json.Serialization;
 using LogiTrack;
-using LogiTrack.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +15,7 @@ builder.Services.AddDbContext<LogiTrackContext>(options =>
     options.UseSqlite("Data Source=logitrack.db"));
 
 // 2. Configure ASP.NET Core Identity
-builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+builder.Services.AddIdentity<LogiTrack.Models.ApplicationUser, IdentityRole>(options =>
 {
     options.Password.RequireDigit = false;
     options.Password.RequireLowercase = false;
@@ -152,7 +152,7 @@ using (var scope = app.Services.CreateScope())
     var services = scope.ServiceProvider;
     var context = services.GetRequiredService<LogiTrackContext>();
     var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
-    var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+    var userManager = services.GetRequiredService<UserManager<LogiTrack.Models.ApplicationUser>>();
 
     // 1. Seed Roles
     string[] roleNames = { "Manager", "User" };
@@ -167,7 +167,7 @@ using (var scope = app.Services.CreateScope())
     // 2. Seed Default Manager User
     if (await userManager.FindByNameAsync("manager") == null)
     {
-        var managerUser = new ApplicationUser
+        var managerUser = new LogiTrack.Models.ApplicationUser
         {
             UserName = "manager",
             Email = "manager@logitrack.com",
@@ -183,7 +183,7 @@ using (var scope = app.Services.CreateScope())
     // 3. Seed Default Regular User
     if (await userManager.FindByNameAsync("user") == null)
     {
-        var regularUser = new ApplicationUser
+        var regularUser = new LogiTrack.Models.ApplicationUser
         {
             UserName = "user",
             Email = "user@logitrack.com",

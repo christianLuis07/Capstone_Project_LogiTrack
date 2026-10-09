@@ -4,7 +4,7 @@ using LogiTrack.Models;
 
 namespace LogiTrack;
 
-public class LogiTrackContext : IdentityDbContext<ApplicationUser>
+public class LogiTrackContext : IdentityDbContext<LogiTrack.Models.ApplicationUser>
 {
     public DbSet<InventoryItem> InventoryItems { get; set; } = null!;
     public DbSet<Order> Orders { get; set; } = null!;
