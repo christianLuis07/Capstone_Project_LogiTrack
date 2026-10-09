@@ -1,6 +1,56 @@
 @LogiTrack_HostAddress = http://localhost:5160
 
-GET {{LogiTrack_HostAddress}}/weatherforecast/
+### 1. Get all inventory items
+GET {{LogiTrack_HostAddress}}/api/inventory
 Accept: application/json
 
-###
+### 2. Get inventory item by ID
+GET {{LogiTrack_HostAddress}}/api/inventory/1
+Accept: application/json
+
+### 3. Add a new inventory item
+POST {{LogiTrack_HostAddress}}/api/inventory
+Content-Type: application/json
+
+{
+  "name": "Industrial Forklift",
+  "quantity": 5,
+  "location": "Warehouse B"
+}
+
+### 4. Delete inventory item by ID
+DELETE {{LogiTrack_HostAddress}}/api/inventory/2
+Accept: application/json
+
+### 5. Get all orders
+GET {{LogiTrack_HostAddress}}/api/orders
+Accept: application/json
+
+### 6. Get order by ID (with items)
+GET {{LogiTrack_HostAddress}}/api/orders/1
+Accept: application/json
+
+### 7. Create a new order with multiple items
+POST {{LogiTrack_HostAddress}}/api/orders
+Content-Type: application/json
+
+{
+  "customerName": "Elena Rostova",
+  "datePlaced": "2026-10-10T08:30:00Z",
+  "items": [
+    {
+      "name": "Barcode Scanner",
+      "quantity": 3,
+      "location": "Warehouse A"
+    },
+    {
+      "name": "Heavy Duty Hand Truck",
+      "quantity": 2,
+      "location": "Warehouse C"
+    }
+  ]
+}
+
+### 8. Delete order by ID
+DELETE {{LogiTrack_HostAddress}}/api/orders/1
+Accept: application/json

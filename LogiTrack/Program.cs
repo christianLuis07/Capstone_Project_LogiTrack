@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using LogiTrack;
 using LogiTrack.Models;
 using Microsoft.EntityFrameworkCore;
@@ -8,63 +9,109 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<LogiTrackContext>(options =>
     options.UseSqlite("Data Source=logitrack.db"));
 
-// Add services to the container
-builder.Services.AddOpenApi();
+// Register Controllers and handle cyclic references
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    });
+
+// Configure Swagger / OpenAPI
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
+    {
+        Title = "LogiTrack Order Management API",
+        Version = "v1",
+        Description = "LogiTrack Order and Inventory Management Web API (Capstone Part 2)"
+    });
+});
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "LogiTrack API v1");
+        c.RoutePrefix = "swagger";
+    });
 }
 
 app.UseHttpsRedirection();
+app.UseAuthorization();
+
+// Map controller routes
+app.MapControllers();
+
+// Health check and route discovery landing endpoint
+app.MapGet("/", () => Results.Ok(new
+{
+    Application = "LogiTrack Order Management System",
+    Status = "Healthy",
+    Version = "Part 2 Active",
+    SwaggerUI = "/swagger",
+    Endpoints = new[]
+    {
+        "GET /api/inventory",
+        "GET /api/inventory/{id}",
+        "POST /api/inventory",
+        "DELETE /api/inventory/{id}",
+        "GET /api/orders",
+        "GET /api/orders/{id}",
+        "POST /api/orders",
+        "DELETE /api/orders/{id}"
+    }
+}));
 
 // ==========================================
-// CAPSTONE ACTIVITY TESTS (Steps 2, 3, & 5)
+// CAPSTONE ACTIVITY STARTUP TESTS & SEEDING
 // ==========================================
-
-Console.WriteLine("==================================================");
-Console.WriteLine("Step 2 Test: InventoryItem DisplayInfo()");
-Console.WriteLine("==================================================");
-var testItem = new InventoryItem
+using (var scope = app.Services.CreateScope())
 {
-    ItemId = 1,
-    Name = "Pallet Jack",
-    Quantity = 12,
-    Location = "Warehouse A"
-};
-testItem.DisplayInfo();
+    var context = scope.ServiceProvider.GetRequiredService<LogiTrackContext>();
 
-Console.WriteLine();
-Console.WriteLine("==================================================");
-Console.WriteLine("Step 3 Test: Order Add/Remove & Summary");
-Console.WriteLine("==================================================");
-var testOrder = new Order
-{
-    OrderId = 1001,
-    CustomerName = "Samir",
-    DatePlaced = new DateTime(2025, 4, 5)
-};
-var item1 = new InventoryItem { ItemId = 101, Name = "Pallet Jack", Quantity = 2, Location = "Warehouse A" };
-var item2 = new InventoryItem { ItemId = 102, Name = "Forklift", Quantity = 1, Location = "Warehouse B" };
-var item3 = new InventoryItem { ItemId = 103, Name = "Hand Truck", Quantity = 4, Location = "Warehouse C" };
+    Console.WriteLine("==================================================");
+    Console.WriteLine("Step 2 Test: InventoryItem DisplayInfo()");
+    Console.WriteLine("==================================================");
+    var testItem = new InventoryItem
+    {
+        ItemId = 1,
+        Name = "Pallet Jack",
+        Quantity = 12,
+        Location = "Warehouse A"
+    };
+    testItem.DisplayInfo();
 
-testOrder.AddItem(item1);
-testOrder.AddItem(item2);
-testOrder.AddItem(item3);
-testOrder.RemoveItem(103); // Remove Hand Truck, leaving 2 items
+    Console.WriteLine();
+    Console.WriteLine("==================================================");
+    Console.WriteLine("Step 3 Test: Order Add/Remove & Summary");
+    Console.WriteLine("==================================================");
+    var testOrder = new Order
+    {
+        OrderId = 1001,
+        CustomerName = "Samir",
+        DatePlaced = new DateTime(2025, 4, 5)
+    };
+    var item1 = new InventoryItem { ItemId = 101, Name = "Pallet Jack", Quantity = 2, Location = "Warehouse A" };
+    var item2 = new InventoryItem { ItemId = 102, Name = "Forklift", Quantity = 1, Location = "Warehouse B" };
+    var item3 = new InventoryItem { ItemId = 103, Name = "Hand Truck", Quantity = 4, Location = "Warehouse C" };
 
-Console.WriteLine(testOrder.GetOrderSummary());
+    testOrder.AddItem(item1);
+    testOrder.AddItem(item2);
+    testOrder.AddItem(item3);
+    testOrder.RemoveItem(103);
 
-Console.WriteLine();
-Console.WriteLine("==================================================");
-Console.WriteLine("Step 5 Test: Seed and Verify Database");
-Console.WriteLine("==================================================");
-using (var context = new LogiTrackContext())
-{
-    // Add test inventory item if none exist
+    Console.WriteLine(testOrder.GetOrderSummary());
+
+    Console.WriteLine();
+    Console.WriteLine("==================================================");
+    Console.WriteLine("Step 5 Test: Seed and Verify Database");
+    Console.WriteLine("==================================================");
     if (!context.InventoryItems.Any())
     {
         context.InventoryItems.Add(new InventoryItem
@@ -77,31 +124,13 @@ using (var context = new LogiTrackContext())
         context.SaveChanges();
     }
 
-    // Retrieve and print inventory to confirm
     var items = context.InventoryItems.ToList();
     foreach (var item in items)
     {
-        item.DisplayInfo(); // Should print: Item: Pallet Jack | Quantity: 12 | Location: Warehouse A
+        item.DisplayInfo();
     }
+    Console.WriteLine("==================================================");
+    Console.WriteLine();
 }
-Console.WriteLine("==================================================");
-Console.WriteLine();
-
-// ==========================================
-// API Endpoints for upcoming Part 2
-// ==========================================
-
-app.MapGet("/", () => Results.Ok(new
-{
-    Application = "LogiTrack Order Management System",
-    Status = "Healthy",
-    Version = "Part 1 Complete"
-}));
-
-app.MapGet("/api/inventory", async (LogiTrackContext db) =>
-    await db.InventoryItems.ToListAsync());
-
-app.MapGet("/api/orders", async (LogiTrackContext db) =>
-    await db.Orders.Include(o => o.Items).ToListAsync());
 
 app.Run();
